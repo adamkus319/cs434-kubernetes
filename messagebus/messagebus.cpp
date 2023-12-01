@@ -50,7 +50,8 @@ void messagebus::sendMessage(const std::string& message, const Node& node) {
 
 void messagebus::receiveMessage() {
     while (true) {
-        int server_fd, new_socket, valread;
+        // create socket and wait for connections
+        int server_fd, new_socket;
         struct sockaddr_in address;
         int opt = 1;
         int addrlen = sizeof(address);
@@ -66,6 +67,7 @@ void messagebus::receiveMessage() {
             std::cout << "setsockopt" << std::endl;
             exit(EXIT_FAILURE);
         }
+
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = INADDR_ANY;
         address.sin_port = htons(std::stoi(nodes[0].port));
@@ -75,16 +77,19 @@ void messagebus::receiveMessage() {
             std::cout << "bind failed" << std::endl;
             exit(EXIT_FAILURE);
         }
+
         if (listen(server_fd, 3) < 0) {
             std::cout << "listen" << std::endl;
             exit(EXIT_FAILURE);
         }
+
         if ((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
             std::cout << "accept" << std::endl;
             exit(EXIT_FAILURE);
         }
+
         char buffer[1024] = {0};
-        valread = read(new_socket, buffer, 1024);
+        int valread = read(new_socket, buffer, 1024);
         std::cout << "Message received: " << buffer << std::endl;
         close(new_socket);
         close(server_fd);
