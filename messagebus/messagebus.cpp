@@ -1,6 +1,6 @@
 #include "messagebus.hpp"
 
-messagebus::messagebus(const std::vector<std::string>& addresses, const std::vector<int>& ports) {
+messagebus::messagebus(const std::vector<std::string>& addresses, const std::vector<int>& ports, const std::string& selfAddress, int selfPort) {
     for (int i = 0; i < addresses.size(); i++) {
         Node node;
         node.ipAddress = addresses[i];
@@ -8,8 +8,11 @@ messagebus::messagebus(const std::vector<std::string>& addresses, const std::vec
         nodes.push_back(node);
     }
 
-    std::thread t1(&messagebus::receiveMessage, this);
-    t1.detach();
+    selfNode.ipAddress = selfAddress;
+    selfNode.port = selfPort;
+
+    // call the receiveMessage function
+    receiveMessage();
 }
 
 messagebus::~messagebus() {}
@@ -23,14 +26,13 @@ void messagebus::sendMessage(const std::string& message) {
 void messagebus::sendMessage(const std::string& message, const Node& node) {
     int sock = 0;
     struct sockaddr_in serv_addr;
-    char buffer[1024] = {0};
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         std::cout << "Socket creation error" << std::endl;
         return;
     }
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(std::stoi(node.port));
+    serv_addr.sin_port = htons(node.port);
 
     // Convert IPv4 and IPv6 addresses from text to binary form
     if (inet_pton(AF_INET, node.ipAddress.c_str(), &serv_addr.sin_addr) <= 0) {
@@ -43,55 +45,73 @@ void messagebus::sendMessage(const std::string& message, const Node& node) {
         return;
     }
 
+    struct sockaddr_in localAddr;
+    socklen_t addrSize = sizeof(localAddr);
+    if (getsockname(sock, (struct sockaddr*)&localAddr, &addrSize) == -1) {
+        std::cout << "Getsockname failed" << std::endl;
+        close(sock);
+        return;
+    }
+    int localPort = ntohs(localAddr.sin_port);
+    std::cout << "Sending from port: " << localPort << std::endl;
+
     send(sock, message.c_str(), message.length(), 0);
     std::cout << "Message sent to " << node.ipAddress << ":" << node.port << std::endl;
     close(sock);
 }
 
 void messagebus::receiveMessage() {
-    while (true) {
-        // create socket and wait for connections
-        int server_fd, new_socket;
-        struct sockaddr_in address;
-        int opt = 1;
-        int addrlen = sizeof(address);
-
-        // Creating socket file descriptor
-        if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-            std::cout << "socket failed" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-
-        // Forcefully attaching socket to the port 8080
-        if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
-            std::cout << "setsockopt" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-
-        address.sin_family = AF_INET;
-        address.sin_addr.s_addr = INADDR_ANY;
-        address.sin_port = htons(std::stoi(nodes[0].port));
-
-        // Forcefully attaching socket to the port 8080
-        if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
-            std::cout << "bind failed" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-
-        if (listen(server_fd, 3) < 0) {
-            std::cout << "listen" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-
-        if ((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
-            std::cout << "accept" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-
-        char buffer[1024] = {0};
-        int valread = read(new_socket, buffer, 1024);
-        std::cout << "Message received: " << buffer << std::endl;
-        close(new_socket);
-        close(server_fd);
+    for (int i = 0; i < nodes.size(); i++) {
+        // start a thread to receive message for each node
+        std::thread t_rec([this, i]() {
+            this->receiveMessage(nodes[i]);  // Call the appropriate receiveMessage function
+        });
+        t_rec.detach();
     }
+}
+
+void messagebus::receiveMessage(const Node& node) {
+    // create socket and wait for connection
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+
+    // Creating socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        std::cout << "socket failed" << std::endl;
+        return;
+    }
+
+    // Forcefully attaching socket to the port 8080
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        std::cout << "setsockopt" << std::endl;
+        return;
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(node.port);
+
+    // Forcefully attaching socket to the port 8080
+    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        std::cout << "bind failed" << std::endl;
+        return;
+    }
+
+    if (listen(server_fd, 3) < 0) {
+        std::cout << "listen" << std::endl;
+        return;
+    }
+
+    if ((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
+        std::cout << "accept" << std::endl;
+        return;
+    }
+
+    char buffer[1024] = {0};
+    int valread = read(new_socket, buffer, 1024);
+    std::cout << "Message received from " << node.ipAddress << ":" << node.port << std::endl;
+    std::cout << buffer << std::endl;
+    close(new_socket);
 }
