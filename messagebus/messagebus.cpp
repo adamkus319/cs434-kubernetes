@@ -61,13 +61,11 @@ void messagebus::sendMessage(const std::string& message, const Node& node) {
 }
 
 void messagebus::receiveMessage() {
-    for (int i = 0; i < nodes.size(); i++) {
-        // start a thread to receive message for each node
-        std::thread t_rec([this, i]() {
-            this->receiveMessage(nodes[i]);  // Call the appropriate receiveMessage function
-        });
-        t_rec.detach();
-    }
+    // start a thread to receive message
+    std::thread t_rec([this]() {
+        this->receiveMessage(selfNode);  // Call the appropriate receiveMessage function
+    });
+    t_rec.detach();
 }
 
 void messagebus::receiveMessage(const Node& node) {
@@ -113,5 +111,7 @@ void messagebus::receiveMessage(const Node& node) {
     int valread = read(new_socket, buffer, 1024);
     std::cout << "Message received from " << node.ipAddress << ":" << node.port << std::endl;
     std::cout << buffer << std::endl;
+    // send "ACK" back to the sender
+    send(new_socket, "ACK", 3, 0);
     close(new_socket);
 }
