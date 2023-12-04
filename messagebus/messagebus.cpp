@@ -2,6 +2,12 @@
 
 messagebus::messagebus(const std::vector<std::string>& addresses, const std::vector<int>& ports, const std::string& selfAddress, int selfPort) {
     for (int i = 0; i < addresses.size(); i++) {
+        // skip self node
+        if (addresses[i] == selfAddress && ports[i] == selfPort) {
+            continue;
+        }
+
+        // create a node and add it to the vector
         Node node;
         node.ipAddress = addresses[i];
         node.port = ports[i];
@@ -24,6 +30,7 @@ void messagebus::sendMessage(const std::string& message) {
 }
 
 void messagebus::sendMessage(const std::string& message, const Node& node) {
+    // create socket and send message
     int sock = 0;
     struct sockaddr_in serv_addr;
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -45,18 +52,25 @@ void messagebus::sendMessage(const std::string& message, const Node& node) {
         return;
     }
 
-    struct sockaddr_in localAddr;
-    socklen_t addrSize = sizeof(localAddr);
-    if (getsockname(sock, (struct sockaddr*)&localAddr, &addrSize) == -1) {
-        std::cout << "Getsockname failed" << std::endl;
-        close(sock);
-        return;
-    }
-    int localPort = ntohs(localAddr.sin_port);
-    std::cout << "Sending from port: " << localPort << std::endl;
+    // // get the local port number for debugging
+    // struct sockaddr_in localAddr;
+    // socklen_t addrSize = sizeof(localAddr);
+    // if (getsockname(sock, (struct sockaddr*)&localAddr, &addrSize) == -1) {
+    //     std::cout << "Getsockname failed" << std::endl;
+    //     close(sock);
+    //     return;
+    // }
+    // int localPort = ntohs(localAddr.sin_port);
+    // std::cout << "Sending from port: " << localPort << std::endl;
 
     send(sock, message.c_str(), message.length(), 0);
     std::cout << "Message sent to " << node.ipAddress << ":" << node.port << std::endl;
+
+    // get "ACK" back from the receiver
+    char buffer[1024] = {0};
+    int valread = read(sock, buffer, 1024);
+    std::cout << "Response received: " << buffer << std::endl;
+
     close(sock);
 }
 
@@ -109,8 +123,8 @@ void messagebus::receiveMessage(const Node& node) {
 
     char buffer[1024] = {0};
     int valread = read(new_socket, buffer, 1024);
-    std::cout << "Message received from " << node.ipAddress << ":" << node.port << std::endl;
-    std::cout << buffer << std::endl;
+    std::cout << "Message received: " << buffer << std::endl;
+
     // send "ACK" back to the sender
     send(new_socket, "ACK", 3, 0);
     close(new_socket);

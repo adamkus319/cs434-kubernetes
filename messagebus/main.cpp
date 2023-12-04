@@ -8,7 +8,7 @@ int main(int argc, char *argv[]) {
 
 	if(argc == 1){  // default (no arguments)
 		selfAddress = "127.0.0.1";
-		selfPort = 8080;	
+		selfPort = 8080;
 	}
     else if(argc == 3){  // read in IP address and port
 		selfAddress = argv[1];
@@ -19,14 +19,14 @@ int main(int argc, char *argv[]) {
 	}
 
     std::vector<std::string> addresses = {"127.0.0.1", "127.0.0.1"};
-    std::vector<int> ports = {11000, 11001};
+    std::vector<int> ports = {8080, 11000};
 
     messagebus mb(addresses, ports, selfAddress, selfPort);  // set up threads to receive messages
 
     // pass control to terminal
     string rule;
     while(true){
-		cout << "Enter a rule (type 'exit' to quit): ";
+		// cout << "Enter a rule (type 'exit' to quit): ";
 		getline(cin, rule);
 
 		if(rule == "exit") {
