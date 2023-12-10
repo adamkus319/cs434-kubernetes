@@ -1,0 +1,25 @@
+version: '3.5'
+services:
+  messagebus1:
+    container_name: messagebus1
+    build: ./messagebus
+    volumes:
+      - type: bind
+        source: ./messagebus
+        target: /workspace
+    ports:
+      - "4000:50051"
+    stdin_open: true
+    tty: true
+
+  messagebus2:
+    container_name: messagebus2
+    build: ./messagebus
+    volumes:
+      - type: bind
+        source: ./messagebus
+        target: /workspace
+    ports:
+      - "4001:50052"
+    stdin_open: true
+    tty: true
