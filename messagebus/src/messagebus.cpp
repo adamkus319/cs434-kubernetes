@@ -105,7 +105,6 @@ void messagebus::receiveMessage(const Node& node) {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(node.port);
 
-    // Forcefully attaching socket to the port 8080
     if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
         std::cout << "bind failed" << std::endl;
         return;
