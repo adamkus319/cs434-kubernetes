@@ -21,6 +21,7 @@ int main(int argc, char *argv[]) {
     std::vector<std::string> addresses = {"127.0.0.1", "127.0.0.1"};
     std::vector<int> ports = {8080, 11000};
 
+	/*
     messagebus mb(addresses, ports, selfAddress, selfPort);  // set up threads to receive messages
 
     // pass control to terminal
@@ -36,7 +37,7 @@ int main(int argc, char *argv[]) {
 		cout << "Sending rule to other nodes: " << rule << endl;
 		mb.sendMessage(rule);
     }
-
+	*/
     
     return 0;
 }
