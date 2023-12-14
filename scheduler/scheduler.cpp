@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <utility>
 #include <unordered_map>
 
@@ -24,6 +25,12 @@ struct RegionConfig{
 struct GlobalConfig{
 	vector<RegionConfig *> regions;
 };
+
+
+// ServiceConfig equality
+bool operator==(const ServiceConfig& lhs, const ServiceConfig& rhs){
+	return lhs.serviceName == rhs.serviceName && lhs.count == rhs.count;
+}
 
 
 void printServiceConfig(ServiceConfig config){
@@ -96,6 +103,7 @@ int clusterServices(string target_service, ClusterConfig cluster){
 
 // update number of servics within a cluster by adding or subtracting num
 void updateCluster(string target_service, string op, int& services_left, ClusterConfig *cluster){
+	int init_services_left = services_left;  // initial number of services left to change upon 
 	for(const auto& service_ptr : cluster->services){  // loop
 		if(service_ptr->serviceName == target_service){
 			if(op == "add"){
@@ -103,6 +111,19 @@ void updateCluster(string target_service, string op, int& services_left, Cluster
 			}
 			else if(op == "sub"){
 				service_ptr->count--;  // decrement number of services
+				if(service_ptr->count == 0){  // no copies of service left in cluster
+					ServiceConfig *s = createService(target_service, 0);  // dummy service for search
+					auto it = find_if(cluster->services.begin(), cluster->services.end(), [s](ServiceConfig *ptr) {return *ptr == *s;});  // find service entry in cluster (search values)
+					//auto it = find(cluster->services.begin(), cluster->services.end(), s);
+					if(it != cluster->services.end()){  // found service
+						cluster->services.erase(it);  // remove service from cluster
+						delete s;  // de-allocate space
+					}
+					else{
+						delete s;  // de-allocate space
+						throw logic_error("Should find service");
+					}
+				}
 			}
 			else{
 				throw invalid_argument("Invalid op value");
@@ -110,7 +131,14 @@ void updateCluster(string target_service, string op, int& services_left, Cluster
 
 			services_left--;
 			if(services_left == 0) return;  // all counts updated
+			break;  // exit for loop, no service should only appear once in cluster
 		}
+	}
+
+	if(init_services_left == services_left && op == "add"){  // service not found but could be added
+		ServiceConfig *s = createService(target_service, 1);  // create new service entry
+		cluster->services.push_back(s);  // add copy of service to cluster
+		services_left--;
 	}
 }
 
@@ -120,7 +148,7 @@ void updateRegion(string target_service, string op, int& services_left, RegionCo
 		for(const auto& cluster_ptr : region->clusters){  // loop over clusters
 			updateCluster(target_service, op, services_left, cluster_ptr);
 			if(services_left == 0) return;  // all counts updated
-		}	
+		}
 	}
 }
 
@@ -162,7 +190,8 @@ void scheduler(GlobalConfig *currGlobalConfig, pair<string, unordered_map<string
 
 
 int main(){
-	ServiceConfig *s1 = createService("nginx", 2);
+	// US region
+	ServiceConfig *s1 = createService("nginx", 1);
 	ServiceConfig *s2 = createService("apache", 3);
 	ServiceConfig *s3 = createService("webapp", 1);
 	ServiceConfig *s4 = createService("loadbalancer", 1);
@@ -172,10 +201,23 @@ int main(){
 	ClusterConfig *c1 = createCluster("us-east", ss1);
 	ClusterConfig *c2 = createCluster("us-west", ss2);
 
-	vector<ClusterConfig *> cs = {c1, c2};
-	RegionConfig *r1 = createRegion("us", cs);
+	vector<ClusterConfig *> cs1 = {c1, c2};
+	RegionConfig *r1 = createRegion("us", cs1);
 
-	vector<RegionConfig *> rs = {r1};	
+	// EUR region
+	ServiceConfig *s5 = createService("jetty", 4);
+	ServiceConfig *s6 = createService("nginx", 3);
+
+	vector<ServiceConfig *> ss3 = {s5, s6};
+	vector<ServiceConfig *> ss4 = {s4};
+	ClusterConfig *c3 = createCluster("france", ss3);
+	ClusterConfig *c4 = createCluster("uk", ss4);
+
+	vector<ClusterConfig *> cs2 = {c3, c4};
+	RegionConfig *r2 = createRegion("eur", cs2);
+
+	// global config
+	vector<RegionConfig *> rs = {r1, r2};	
 	GlobalConfig *currGlobalConfig = createGlobal(rs);
 
 	cout << "Before updates:" << endl;		
@@ -183,10 +225,11 @@ int main(){
 	cout << endl;
 
 	pair<string, unordered_map<string, int>> update;
-	update.first = "us";
+	update.first = "eur";
 
 	unordered_map<string, int> service_map;
-	service_map["nginx"] = 4;
+	service_map["ngrok"] = 2;
+	service_map["nginx"] = 3;
 	update.second = service_map;
 
 	scheduler(currGlobalConfig, update);
