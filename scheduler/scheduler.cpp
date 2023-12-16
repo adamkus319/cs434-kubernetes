@@ -1,63 +1,93 @@
-#include "scheduler.hpp"
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+using namespace std;
+
+struct ServiceConfig {
+    string serviceName;
+    int count;
+};
+
+struct ClusterConfig {
+    vector<ServiceConfig *> services;
+    string clusterName;
+};
+
+struct RegionConfig {
+    vector<ClusterConfig *> clusters;
+    string regionName;
+};
+
+struct GlobalConfig {
+    vector<RegionConfig *> regions;
+};
 
 // ServiceConfig equality
-bool operator==(const ServiceConfigLocal &lhs, const ServiceConfigLocal &rhs) {
+bool operator==(const ServiceConfig &lhs, const ServiceConfig &rhs) {
     return lhs.serviceName == rhs.serviceName && lhs.count == rhs.count;
 }
 
-void printClusterConfigLocal(const ClusterConfigLocal *config) {
-    cout << " " << config->clusterName << ":" << endl;
-    for (const auto &service_ptr : config->services) {
-        printServiceConfigLocal(service_ptr);
+void printServiceConfig(ServiceConfig config) {
+    cout << "  " << config.serviceName << ": " << to_string(config.count) << endl;
+}
+
+void printClusterConfig(ClusterConfig config) {
+    cout << " " << config.clusterName << ":" << endl;
+    for (const auto &service_ptr : config.services) {
+        printServiceConfig(*service_ptr);
     }
 }
 
-void printRegionConfigLocal(const RegionConfigLocal *config) {
-    cout << config->regionName << ":" << endl;
-    for (const auto &cluster_ptr : config->clusters) {
-        printClusterConfigLocal(cluster_ptr);
+void printRegionConfig(RegionConfig config) {
+    cout << config.regionName << ":" << endl;
+    for (const auto &cluster_ptr : config.clusters) {
+        printClusterConfig(*cluster_ptr);
     }
 }
 
-void printGlobalConfigLocal(const GlobalConfigLocal *config) {
-    for (const auto &region_ptr : config->regions) {
-        printRegionConfigLocal(region_ptr);
+void printGlobalConfig(GlobalConfig config) {
+    for (const auto &region_ptr : config.regions) {
+        printRegionConfig(*region_ptr);
     }
 }
 
 // create new service
-ServiceConfigLocal *createService(string serviceName, int count) {
-    ServiceConfigLocal *s = new ServiceConfigLocal;
+ServiceConfig *createService(string serviceName, int count) {
+    ServiceConfig *s = new ServiceConfig;
     s->serviceName = serviceName;
     s->count = count;
     return s;
 }
 
 // create new cluster
-ClusterConfigLocal *createCluster(string clusterName, vector<ServiceConfigLocal *> services) {
-    ClusterConfigLocal *c = new ClusterConfigLocal;
+ClusterConfig *createCluster(string clusterName, vector<ServiceConfig *> services) {
+    ClusterConfig *c = new ClusterConfig;
     c->clusterName = clusterName;
     c->services = services;
     return c;
 }
 
 // create new region
-RegionConfigLocal *createRegion(string regionName, vector<ClusterConfigLocal *> clusters) {
-    RegionConfigLocal *r = new RegionConfigLocal;
+RegionConfig *createRegion(string regionName, vector<ClusterConfig *> clusters) {
+    RegionConfig *r = new RegionConfig;
     r->regionName = regionName;
     r->clusters = clusters;
     return r;
 }
 
 // create new global configuration
-GlobalConfigLocal *createGlobal(vector<RegionConfigLocal *> regions) {
-    GlobalConfigLocal *g = new GlobalConfigLocal;
+GlobalConfig *createGlobal(vector<RegionConfig *> regions) {
+    GlobalConfig *g = new GlobalConfig;
     g->regions = regions;
     return g;
 }
 
 // get count of target service instances running on cluster
-int clusterServices(string target_service, ClusterConfigLocal cluster) {
+int clusterServices(string target_service, ClusterConfig cluster) {
     for (const auto &service_ptr : cluster.services) {  // loop over services
         if (service_ptr->serviceName == target_service) {
             return service_ptr->count;  // return number of target services in cluster
@@ -68,17 +98,17 @@ int clusterServices(string target_service, ClusterConfigLocal cluster) {
 }
 
 // update number of servics within a cluster by adding or subtracting num
-void updateCluster(string target_service, string op, int &services_left, ClusterConfigLocal *cluster) {
+void updateCluster(string target_service, string op, int &services_left, ClusterConfig *cluster) {
     int init_services_left = services_left;              // initial number of services left to change upon
     for (const auto &service_ptr : cluster->services) {  // loop
         if (service_ptr->serviceName == target_service) {
             if (op == "add") {
                 service_ptr->count++;  // increment number of services
             } else if (op == "sub") {
-                service_ptr->count--;                                                                                                            // decrement number of services
-                if (service_ptr->count == 0) {                                                                                                   // no copies of service left in cluster
-                    ServiceConfigLocal *s = createService(target_service, 0);                                                                    // dummy service for search
-                    auto it = find_if(cluster->services.begin(), cluster->services.end(), [s](ServiceConfigLocal *ptr) { return *ptr == *s; });  // find service entry in cluster (search values)
+                service_ptr->count--;                                                                                                       // decrement number of services
+                if (service_ptr->count == 0) {                                                                                              // no copies of service left in cluster
+                    ServiceConfig *s = createService(target_service, 0);                                                                    // dummy service for search
+                    auto it = find_if(cluster->services.begin(), cluster->services.end(), [s](ServiceConfig *ptr) { return *ptr == *s; });  // find service entry in cluster (search values)
                     // auto it = find(cluster->services.begin(), cluster->services.end(), s);
                     if (it != cluster->services.end()) {  // found service
                         cluster->services.erase(it);      // remove service from cluster
@@ -98,15 +128,15 @@ void updateCluster(string target_service, string op, int &services_left, Cluster
         }
     }
 
-    if (init_services_left == services_left && op == "add") {      // service not found but could be added
-        ServiceConfigLocal *s = createService(target_service, 1);  // create new service entry
-        cluster->services.push_back(s);                            // add copy of service to cluster
+    if (init_services_left == services_left && op == "add") {  // service not found but could be added
+        ServiceConfig *s = createService(target_service, 1);   // create new service entry
+        cluster->services.push_back(s);                        // add copy of service to cluster
         services_left--;
     }
 }
 
 // update number of services within a region by calling updateCluster for each cluster
-void updateRegion(string target_service, string op, int &services_left, RegionConfigLocal *region) {
+void updateRegion(string target_service, string op, int &services_left, RegionConfig *region) {
     while (services_left) {                                 // keep looping over clusters until no services left
         for (const auto &cluster_ptr : region->clusters) {  // loop over clusters
             updateCluster(target_service, op, services_left, cluster_ptr);
@@ -116,7 +146,7 @@ void updateRegion(string target_service, string op, int &services_left, RegionCo
 }
 
 // input current configuration and pair <regionName, unordered_map<serviceName, count>> with update
-void scheduler(GlobalConfigLocal *currGlobalConfig, pair<string, unordered_map<string, int>> update) {
+void scheduler(GlobalConfig *currGlobalConfig, pair<string, unordered_map<string, int>> update) {
     for (const auto &region_ptr : currGlobalConfig->regions) {           // iterate over regions
         if (region_ptr->regionName == update.first) {                    // check if region is region being updated
             unordered_map<string, int> service_updates = update.second;  // services to update
@@ -149,37 +179,37 @@ void scheduler(GlobalConfigLocal *currGlobalConfig, pair<string, unordered_map<s
 
 int main() {
     // US region
-    ServiceConfigLocal *s1 = createService("nginx", 1);
-    ServiceConfigLocal *s2 = createService("apache", 3);
-    ServiceConfigLocal *s3 = createService("webapp", 1);
-    ServiceConfigLocal *s4 = createService("loadbalancer", 1);
+    ServiceConfig *s1 = createService("nginx", 1);
+    ServiceConfig *s2 = createService("apache", 3);
+    ServiceConfig *s3 = createService("webapp", 1);
+    ServiceConfig *s4 = createService("loadbalancer", 1);
 
-    vector<ServiceConfigLocal *> ss1 = {s1, s2};
-    vector<ServiceConfigLocal *> ss2 = {s3, s4};
-    ClusterConfigLocal *c1 = createCluster("us-east", ss1);
-    ClusterConfigLocal *c2 = createCluster("us-west", ss2);
+    vector<ServiceConfig *> ss1 = {s1, s2};
+    vector<ServiceConfig *> ss2 = {s3, s4};
+    ClusterConfig *c1 = createCluster("us-east", ss1);
+    ClusterConfig *c2 = createCluster("us-west", ss2);
 
-    vector<ClusterConfigLocal *> cs1 = {c1, c2};
-    RegionConfigLocal *r1 = createRegion("us", cs1);
+    vector<ClusterConfig *> cs1 = {c1, c2};
+    RegionConfig *r1 = createRegion("us", cs1);
 
     // EUR region
-    ServiceConfigLocal *s5 = createService("jetty", 4);
-    ServiceConfigLocal *s6 = createService("nginx", 3);
+    ServiceConfig *s5 = createService("jetty", 4);
+    ServiceConfig *s6 = createService("nginx", 3);
 
-    vector<ServiceConfigLocal *> ss3 = {s5, s6};
-    vector<ServiceConfigLocal *> ss4 = {s4};
-    ClusterConfigLocal *c3 = createCluster("france", ss3);
-    ClusterConfigLocal *c4 = createCluster("uk", ss4);
+    vector<ServiceConfig *> ss3 = {s5, s6};
+    vector<ServiceConfig *> ss4 = {s4};
+    ClusterConfig *c3 = createCluster("france", ss3);
+    ClusterConfig *c4 = createCluster("uk", ss4);
 
-    vector<ClusterConfigLocal *> cs2 = {c3, c4};
-    RegionConfigLocal *r2 = createRegion("eur", cs2);
+    vector<ClusterConfig *> cs2 = {c3, c4};
+    RegionConfig *r2 = createRegion("eur", cs2);
 
-    // global configLocal
-    vector<RegionConfigLocal *> rs = {r1, r2};
-    GlobalConfigLocal *currGlobalConfigLocal = createGlobal(rs);
+    // global config
+    vector<RegionConfig *> rs = {r1, r2};
+    GlobalConfig *currGlobalConfig = createGlobal(rs);
 
     cout << "Before updates:" << endl;
-    printGlobalConfigLocal(currGlobalConfigLocal);
+    printGlobalConfig(*currGlobalConfig);
     cout << endl;
 
     pair<string, unordered_map<string, int>> update;
@@ -190,10 +220,10 @@ int main() {
     service_map["nginx"] = 3;
     update.second = service_map;
 
-    scheduler(currGlobalConfigLocal, update);
+    scheduler(currGlobalConfig, update);
 
     cout << "After updates:" << endl;
-    printGlobalConfigLocal(*currGlobalConfigLocal);
+    printGlobalConfig(*currGlobalConfig);
 
     return 0;
 }
