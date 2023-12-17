@@ -11,7 +11,7 @@ services:
       - SERVER_ADDRESS=0.0.0.0:50051
       - PEER_ADDRESSES=messagebus2:50052
     ports:
-      - "4000:50051"
+      - "80:50051"
     stdin_open: true
     tty: true
 
@@ -26,6 +26,6 @@ services:
       - SERVER_ADDRESS=0.0.0.0:50052
       - PEER_ADDRESSES=messagebus1:50051
     ports:
-      - "4001:50052"
+      - "81:50052"
     stdin_open: true
     tty: true

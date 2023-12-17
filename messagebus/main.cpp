@@ -146,6 +146,8 @@ void RunServer(string selfAddress) {
 }
 
 int main(int argc, char** argv) {
+    cout << "Starting messagebus" << endl;
+
     char* addr = std::getenv("SERVER_ADDRESS");
     string selfAddress;
 
@@ -159,7 +161,7 @@ int main(int argc, char** argv) {
     char* address_str = std::getenv("PEER_ADDRESSES");
     addresses = vector<string>();
     if (address_str == NULL) {
-        cerr << "SERVER_ADDRESS not set" << endl;
+        cerr << "PEER_ADDRESS not set" << endl;
         return 1;
     } else {
         // parse address (comma separated)
