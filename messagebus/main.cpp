@@ -205,11 +205,13 @@ void RunServer(string selfAddress) {
 }
 
 int main(int argc, char** argv) {
-	string configFile = "k8s_config.conf"
-	if(parseConfig(configFile)){  // parse config file
-		cerr << "Config file error" << endl;
-		return 1;
-	}
+    cout << "Starting messagebus" << endl;
+
+	  string configFile = "k8s_config.conf"
+	  if(parseConfig(configFile)){  // parse config file
+		    cerr << "Config file error" << endl;
+		    return 1;
+	  }
 
     RunServer(selfAddress);
     return 0;
