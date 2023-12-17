@@ -16,10 +16,65 @@ using namespace std;
 using namespace messagebus;
 using namespace grpc;
 
+
+// config globals
+string selfAddress;
+vector<string> addresses;
+string regionName;
+string clusterName;
+
+
 void sendGlobalConfig(GlobalConfigLocal* config);
 
 GlobalConfigLocal* currGlobalConfig = createGlobal(vector<RegionConfigLocal*>());
-vector<string> addresses = vector<string>();
+
+// parse config file
+int parseConfig(string configFile){
+	ifstream config(configFile);
+
+	if(!config.is_open()){
+		cerr << "Error opening config file" << endl;
+		return 1;
+	}
+
+	string serverAddress = "SERVER_ADDRESS";
+	string peerAddresses = "PEER_ADDRESSES";
+	string regionNameConf = "REGION_NAME";
+	string clusterNameConf = "CLUSTER_NAME";
+
+	string line;
+	while(getline(config, line)){
+		if(line.substr(0, serverAddress.size()) == serverAddress){  // match SERVER_ADDRESS
+			selfAddress = line.substr(serverAddress.size() + 1);
+		}
+		else if(line.substr(0, peerAddresses.size()) == peerAddresses){  // match PEER_ADDRESSES
+			string addressesString = line.substr(peerAddresses.size() + 1);
+			istringstream as(addressesString);
+			
+			string address;
+			while(getline(as, address, ',')){  // get comma-separated addresses
+				addresses.push_back(address);
+			}
+		}
+		else if(line.substr(0, regionNameConf.size()) == regionNameConf){  // match REGION_NAME
+			regionName = line.substr(regionNameConf.size() + 1);
+		}
+		else if(line.substr(0, clusterNameConf.size()) == clusterNameConf){  // match CLUSTER_NAME
+			clusterName = line.substr(clusterNameConf.size() + 1);
+		}
+		else if(line.empty()){  // empty line
+			continue;
+		}
+		else{
+			cerr << "Error parsing config file" << endl;
+			config.close();
+			return 1;
+		}
+	}
+
+	config.close();	
+	return 0;  // successfully parsed config file
+}
 
 GlobalConfig* convertGlobalConfigLocal(const GlobalConfigLocal* config) {
     GlobalConfig* g = new GlobalConfig;
@@ -71,12 +126,16 @@ class MessageBusServiceImpl : public MessageBus::Service {
             return Status::OK;
         }
 
+		// schedule updates
         scheduler(currGlobalConfig, make_pair(request->regionname(), unordered_map<string, int>{{request->servicename(), request->count()}}));
 
         // print request data
         cout << "Region: " << request->regionname() << endl;
         cout << "Service: " << request->servicename() << endl;
         cout << "Count: " << request->count() << endl;
+
+		// update local deployments
+		updateLocal(regionName, clusterName, currGlobalConfig);
 
         sendGlobalConfig(currGlobalConfig);
 
@@ -148,29 +207,11 @@ void RunServer(string selfAddress) {
 int main(int argc, char** argv) {
     cout << "Starting messagebus" << endl;
 
-    char* addr = std::getenv("SERVER_ADDRESS");
-    string selfAddress;
-
-    if (addr == nullptr) {
-        cerr << "SERVER_ADDRESS not set" << endl;
-        return 1;
-    } else {
-        selfAddress = addr;
-    }
-
-    char* address_str = std::getenv("PEER_ADDRESSES");
-    addresses = vector<string>();
-    if (address_str == NULL) {
-        cerr << "PEER_ADDRESS not set" << endl;
-        return 1;
-    } else {
-        // parse address (comma separated)
-        std::istringstream ss(address_str);
-        std::string token;
-        while (std::getline(ss, token, ',')) {
-            addresses.push_back(token);
-        }
-    }
+	  string configFile = "k8s_config.conf"
+	  if(parseConfig(configFile)){  // parse config file
+		    cerr << "Config file error" << endl;
+		    return 1;
+	  }
 
     RunServer(selfAddress);
     return 0;
