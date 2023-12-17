@@ -16,64 +16,86 @@ using namespace std;
 using namespace messagebus;
 using namespace grpc;
 
-
 // config globals
 string selfAddress;
 vector<string> addresses;
 string regionName;
 string clusterName;
 
-
 void sendGlobalConfig(GlobalConfigLocal* config);
 
-GlobalConfigLocal* currGlobalConfig = createGlobal(vector<RegionConfigLocal*>());
+// INIT STATE
+// GlobalConfigLocal* currGlobalConfig = createGlobal(vector<RegionConfigLocal*>());
+ServiceConfigLocal* s1 = createService("nginx", 1);
+ServiceConfigLocal* s2 = createService("apache", 3);
+ServiceConfigLocal* s3 = createService("webapp", 1);
+ServiceConfigLocal* s4 = createService("loadbalancer", 1);
+
+vector<ServiceConfigLocal*> ss1 = {s1, s2};
+vector<ServiceConfigLocal*> ss2 = {s3, s4};
+ClusterConfigLocal* c1 = createCluster("us-east", ss1);
+ClusterConfigLocal* c2 = createCluster("us-west", ss2);
+
+vector<ClusterConfigLocal*> cs1 = {c1, c2};
+RegionConfigLocal* r1 = createRegion("us", cs1);
+
+// EUR region
+ServiceConfigLocal* s5 = createService("jetty", 4);
+ServiceConfigLocal* s6 = createService("nginx", 3);
+
+vector<ServiceConfigLocal*> ss3 = {s5, s6};
+vector<ServiceConfigLocal*> ss4 = {s4};
+ClusterConfigLocal* c3 = createCluster("france", ss3);
+ClusterConfigLocal* c4 = createCluster("uk", ss4);
+
+vector<ClusterConfigLocal*> cs2 = {c3, c4};
+RegionConfigLocal* r2 = createRegion("eur", cs2);
+
+// global configLocal
+vector<RegionConfigLocal*> rs = {r1, r2};
+GlobalConfigLocal* currGlobalConfig = createGlobal(rs);
 
 // parse config file
-int parseConfig(string configFile){
-	ifstream config(configFile);
+int parseConfig(string configFile) {
+    ifstream config(configFile);
 
-	if(!config.is_open()){
-		cerr << "Error opening config file" << endl;
-		return 1;
-	}
+    if (!config.is_open()) {
+        cerr << "Error opening config file" << endl;
+        return 1;
+    }
 
-	string serverAddress = "SERVER_ADDRESS";
-	string peerAddresses = "PEER_ADDRESSES";
-	string regionNameConf = "REGION_NAME";
-	string clusterNameConf = "CLUSTER_NAME";
+    string serverAddress = "SERVER_ADDRESS";
+    string peerAddresses = "PEER_ADDRESSES";
+    string regionNameConf = "REGION_NAME";
+    string clusterNameConf = "CLUSTER_NAME";
 
-	string line;
-	while(getline(config, line)){
-		if(line.substr(0, serverAddress.size()) == serverAddress){  // match SERVER_ADDRESS
-			selfAddress = line.substr(serverAddress.size() + 1);
-		}
-		else if(line.substr(0, peerAddresses.size()) == peerAddresses){  // match PEER_ADDRESSES
-			string addressesString = line.substr(peerAddresses.size() + 1);
-			istringstream as(addressesString);
-			
-			string address;
-			while(getline(as, address, ',')){  // get comma-separated addresses
-				addresses.push_back(address);
-			}
-		}
-		else if(line.substr(0, regionNameConf.size()) == regionNameConf){  // match REGION_NAME
-			regionName = line.substr(regionNameConf.size() + 1);
-		}
-		else if(line.substr(0, clusterNameConf.size()) == clusterNameConf){  // match CLUSTER_NAME
-			clusterName = line.substr(clusterNameConf.size() + 1);
-		}
-		else if(line.empty()){  // empty line
-			continue;
-		}
-		else{
-			cerr << "Error parsing config file" << endl;
-			config.close();
-			return 1;
-		}
-	}
+    string line;
+    while (getline(config, line)) {
+        if (line.substr(0, serverAddress.size()) == serverAddress) {  // match SERVER_ADDRESS
+            selfAddress = line.substr(serverAddress.size() + 1);
+        } else if (line.substr(0, peerAddresses.size()) == peerAddresses) {  // match PEER_ADDRESSES
+            string addressesString = line.substr(peerAddresses.size() + 1);
+            istringstream as(addressesString);
 
-	config.close();	
-	return 0;  // successfully parsed config file
+            string address;
+            while (getline(as, address, ',')) {  // get comma-separated addresses
+                addresses.push_back(address);
+            }
+        } else if (line.substr(0, regionNameConf.size()) == regionNameConf) {  // match REGION_NAME
+            regionName = line.substr(regionNameConf.size() + 1);
+        } else if (line.substr(0, clusterNameConf.size()) == clusterNameConf) {  // match CLUSTER_NAME
+            clusterName = line.substr(clusterNameConf.size() + 1);
+        } else if (line.empty()) {  // empty line
+            continue;
+        } else {
+            cerr << "Error parsing config file" << endl;
+            config.close();
+            return 1;
+        }
+    }
+
+    config.close();
+    return 0;  // successfully parsed config file
 }
 
 GlobalConfig* convertGlobalConfigLocal(const GlobalConfigLocal* config) {
@@ -126,7 +148,7 @@ class MessageBusServiceImpl : public MessageBus::Service {
             return Status::OK;
         }
 
-		// schedule updates
+        // schedule updates
         scheduler(currGlobalConfig, make_pair(request->regionname(), unordered_map<string, int>{{request->servicename(), request->count()}}));
 
         // print request data
@@ -134,8 +156,8 @@ class MessageBusServiceImpl : public MessageBus::Service {
         cout << "Service: " << request->servicename() << endl;
         cout << "Count: " << request->count() << endl;
 
-		// update local deployments
-		updateLocal(regionName, clusterName, currGlobalConfig);
+        // update local deployments
+        updateLocal(regionName, clusterName, currGlobalConfig);
 
         sendGlobalConfig(currGlobalConfig);
 
@@ -207,11 +229,14 @@ void RunServer(string selfAddress) {
 int main(int argc, char** argv) {
     cout << "Starting messagebus" << endl;
 
-	  string configFile = "k8s_config.conf"
-	  if(parseConfig(configFile)){  // parse config file
-		    cerr << "Config file error" << endl;
-		    return 1;
-	  }
+    string configFile = "k8s_config.conf" if (parseConfig(configFile)) {  // parse config file
+        cerr << "Config file error" << endl;
+        return 1;
+    }
+
+    cout << "Before updates:" << endl;
+    printGlobalConfigLocal(currGlobalConfig);
+    cout << endl;
 
     RunServer(selfAddress);
     return 0;
