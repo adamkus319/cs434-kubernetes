@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package messagebus;
+
+message ServiceConfig {
+  string serviceName = 1;
+  int32 count = 2;
+}
+
+message ClusterConfig {
+  repeated ServiceConfig services = 1;
+  string clusterName = 2;
+}
+
+message RegionConfig {
+  repeated ClusterConfig clusters = 1;
+  string regionName = 2;
+}
+
+message GlobalConfig {
+  repeated RegionConfig regions = 1;
+}
+
+message updateConfigRequest {
+  string regionName = 1;
+  string serviceName = 2;
+  int32 count = 3;
+}
+
+message updateConfigResponse {
+  bool ok = 1;
+}
+
+service MessageBus {
+  rpc UserUpdateConfig(updateConfigRequest) returns (
+    updateConfigResponse
+  ) {}
+  rpc PeerUpdateConfig(GlobalConfig) returns (
+    updateConfigResponse
+  ) {}
+}

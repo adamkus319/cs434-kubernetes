@@ -5,6 +5,7 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
+#include <fstream>
 #include <iostream>
 #include <sstream>
 
@@ -55,47 +56,38 @@ RegionConfigLocal* r2 = createRegion("eur", cs2);
 vector<RegionConfigLocal*> rs = {r1, r2};
 GlobalConfigLocal* currGlobalConfig = createGlobal(rs);
 
-// parse config file
-int parseConfig(string configFile) {
-    ifstream config(configFile);
-
-    if (!config.is_open()) {
-        cerr << "Error opening config file" << endl;
-        return 1;
-    }
-
+int readEnvironmentVariables() {
     string serverAddress = "SERVER_ADDRESS";
     string peerAddresses = "PEER_ADDRESSES";
     string regionNameConf = "REGION_NAME";
     string clusterNameConf = "CLUSTER_NAME";
 
-    string line;
-    while (getline(config, line)) {
-        if (line.substr(0, serverAddress.size()) == serverAddress) {  // match SERVER_ADDRESS
-            selfAddress = line.substr(serverAddress.size() + 1);
-        } else if (line.substr(0, peerAddresses.size()) == peerAddresses) {  // match PEER_ADDRESSES
-            string addressesString = line.substr(peerAddresses.size() + 1);
-            istringstream as(addressesString);
+    char* serverAddressEnv = std::getenv(serverAddress.c_str());
+    char* peerAddressesEnv = std::getenv(peerAddresses.c_str());
+    char* regionNameEnv = std::getenv(regionNameConf.c_str());
+    char* clusterNameEnv = std::getenv(clusterNameConf.c_str());
 
-            string address;
-            while (getline(as, address, ',')) {  // get comma-separated addresses
-                addresses.push_back(address);
-            }
-        } else if (line.substr(0, regionNameConf.size()) == regionNameConf) {  // match REGION_NAME
-            regionName = line.substr(regionNameConf.size() + 1);
-        } else if (line.substr(0, clusterNameConf.size()) == clusterNameConf) {  // match CLUSTER_NAME
-            clusterName = line.substr(clusterNameConf.size() + 1);
-        } else if (line.empty()) {  // empty line
-            continue;
-        } else {
-            cerr << "Error parsing config file" << endl;
-            config.close();
-            return 1;
-        }
+    cout << "serverAddress: " << serverAddressEnv << endl;
+    cout << "peerAddresses: " << peerAddressesEnv << endl;
+    cout << "regionName: " << regionNameEnv << endl;
+    cout << "clusterName: " << clusterNameEnv << endl;
+
+    if (serverAddressEnv == NULL || peerAddressesEnv == NULL || regionNameEnv == NULL || clusterNameEnv == NULL) {
+        cerr << "Error reading environment variables" << endl;
+        return 1;
     }
 
-    config.close();
-    return 0;  // successfully parsed config file
+    selfAddress = serverAddressEnv;
+    // parse peer addresses (comma-separated)
+    istringstream as(peerAddressesEnv);
+    string address;
+    while (getline(as, address, ',')) {
+        addresses.push_back(address);
+    }
+    regionName = regionNameEnv;
+    clusterName = clusterNameEnv;
+
+    return 0;
 }
 
 GlobalConfig* convertGlobalConfigLocal(const GlobalConfigLocal* config) {
@@ -135,6 +127,11 @@ GlobalConfigLocal* convertGlobalConfig(const GlobalConfig* config) {
 
 class MessageBusServiceImpl : public MessageBus::Service {
     Status UserUpdateConfig(ServerContext* context, const updateConfigRequest* request, updateConfigResponse* response) override {
+        // print request data
+        cout << "Region: " << request->regionname() << endl;
+        cout << "Service: " << request->servicename() << endl;
+        cout << "Count: " << request->count() << endl;
+
         if (request->regionname().size() == 0) {
             response->set_ok(false);
             return Status(StatusCode::INVALID_ARGUMENT, "error: Argument not found");
@@ -148,13 +145,13 @@ class MessageBusServiceImpl : public MessageBus::Service {
             return Status::OK;
         }
 
-        // schedule updates
-        scheduler(currGlobalConfig, make_pair(request->regionname(), unordered_map<string, int>{{request->servicename(), request->count()}}));
-
         // print request data
         cout << "Region: " << request->regionname() << endl;
         cout << "Service: " << request->servicename() << endl;
         cout << "Count: " << request->count() << endl;
+
+        // schedule updates
+        scheduler(currGlobalConfig, make_pair(request->regionname(), unordered_map<string, int>{{request->servicename(), request->count()}}));
 
         // update local deployments
         updateLocal(regionName, clusterName, currGlobalConfig);
@@ -172,6 +169,7 @@ class MessageBusServiceImpl : public MessageBus::Service {
         cout << "Peer update config" << endl;
         GlobalConfigLocal* config = convertGlobalConfig(request);
         printGlobalConfigLocal(config);
+        cout << endl;
 
         // send ack to stream
         response->set_ok(true);
@@ -229,8 +227,8 @@ void RunServer(string selfAddress) {
 int main(int argc, char** argv) {
     cout << "Starting messagebus" << endl;
 
-    string configFile = "k8s_config.conf" if (parseConfig(configFile)) {  // parse config file
-        cerr << "Config file error" << endl;
+    if (readEnvironmentVariables()) {
+        cerr << "You must set environment variables: [serverAddress, peerAddresses, regionName, clusterName]" << endl;
         return 1;
     }
 

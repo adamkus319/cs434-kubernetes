@@ -16,86 +16,133 @@ using namespace std;
 using namespace messagebus;
 using namespace grpc;
 
-void sendGlobalConfig(GlobalConfigLocal* config);
+using grpc::Channel;
+using grpc::ClientContext;
+using grpc::Status;
+using messagebus::MessageBus;
+using messagebus::updateConfigRequest;
+using messagebus::updateConfigResponse;
 
-GlobalConfigLocal* currGlobalConfig = createGlobal(vector<RegionConfigLocal*>());
-vector<string> addresses = vector<string>();
+class MessageBusClient {
+   public:
+    MessageBusClient(std::shared_ptr<Channel> channel)
+        : stub_(MessageBus::NewStub(channel)) {}
 
-GlobalConfig* convertGlobalConfigLocal(const GlobalConfigLocal* config) {
-    GlobalConfig* g = new GlobalConfig;
-    for (const auto& region_ptr : config->regions) {
-        RegionConfig* r = g->add_regions();
-        r->set_regionname(region_ptr->regionName);
-        for (const auto& cluster_ptr : region_ptr->clusters) {
-            ClusterConfig* c = r->add_clusters();
-            c->set_clustername(cluster_ptr->clusterName);
-            for (const auto& service_ptr : cluster_ptr->services) {
-                ServiceConfig* s = c->add_services();
-                s->set_servicename(service_ptr->serviceName);
-                s->set_count(service_ptr->count);
-            }
-        }
-    }
-    return g;
-}
+    bool UserUpdateConfig(const std::string& regionName, const std::string& serviceName, int count) {
+        updateConfigRequest request;
+        request.set_regionname(regionName);
+        request.set_servicename(serviceName);
+        request.set_count(count);
 
-void sendGlobalConfig(GlobalConfigLocal* config) {
-    GlobalConfig* grpc_config = convertGlobalConfigLocal(config);
-
-    // send config to all peers
-    for (int i = 0; i < addresses.size(); i++) {
-        string peerAddress = addresses[i];
-
-        cout << "Sending to " << peerAddress << endl;
-        auto channel = grpc::CreateChannel(peerAddress, grpc::InsecureChannelCredentials());
-        auto stub = MessageBus::NewStub(channel);
-
-        // send config
         updateConfigResponse response;
         ClientContext context;
 
-        Status status = stub->PeerUpdateConfig(&context, *grpc_config, &response);
+        Status status = stub_->UserUpdateConfig(&context, request, &response);
 
-        if (!status.ok()) {
-            cout << "Error: " << status.error_code() << ": " << status.error_message() << endl;
+        if (status.ok()) {
+            return response.ok();
         } else {
-            cout << "Success" << endl;
+            std::cout << "RPC failed: " << status.error_message() << std::endl;
+            return false;
         }
     }
-}
+
+   private:
+    std::unique_ptr<MessageBus::Stub> stub_;
+};
 
 int main(int argc, char** argv) {
-    cout << "Starting messagebus" << endl;
+    MessageBusClient client(grpc::CreateChannel("192.168.64.6:30001", grpc::InsecureChannelCredentials()));
+    std::string regionName = "us";
+    std::string serviceName = "nginx";
+    int count = 5;
 
-    char* addr = std::getenv("SERVER_ADDRESS");
-    string selfAddress;
-
-    if (addr == nullptr) {
-        cerr << "SERVER_ADDRESS not set" << endl;
-        return 1;
-    } else {
-        selfAddress = addr;
-    }
-
-    char* address_str = std::getenv("PEER_ADDRESSES");
-    addresses = vector<string>();
-    if (address_str == NULL) {
-        cerr << "PEER_ADDRESS not set" << endl;
-        return 1;
-    } else {
-        // parse address (comma separated)
-        std::istringstream ss(address_str);
-        std::string token;
-        while (std::getline(ss, token, ',')) {
-            addresses.push_back(token);
-        }
-    }
-
-    // send initial config to peers
-    sendGlobalConfig(currGlobalConfig);
+    bool response = client.UserUpdateConfig(regionName, serviceName, count);
+    std::cout << "Update config was " << (response ? "successful" : "unsuccessful") << std::endl;
 
     return 0;
 }
+
+// void sendGlobalConfig(GlobalConfigLocal* config);
+
+// GlobalConfigLocal* currGlobalConfig = createGlobal(vector<RegionConfigLocal*>());
+// vector<string> addresses = vector<string>();
+
+// GlobalConfig* convertGlobalConfigLocal(const GlobalConfigLocal* config) {
+//     GlobalConfig* g = new GlobalConfig;
+//     for (const auto& region_ptr : config->regions) {
+//         RegionConfig* r = g->add_regions();
+//         r->set_regionname(region_ptr->regionName);
+//         for (const auto& cluster_ptr : region_ptr->clusters) {
+//             ClusterConfig* c = r->add_clusters();
+//             c->set_clustername(cluster_ptr->clusterName);
+//             for (const auto& service_ptr : cluster_ptr->services) {
+//                 ServiceConfig* s = c->add_services();
+//                 s->set_servicename(service_ptr->serviceName);
+//                 s->set_count(service_ptr->count);
+//             }
+//         }
+//     }
+//     return g;
+// }
+
+// void sendGlobalConfig(GlobalConfigLocal* config) {
+//     GlobalConfig* grpc_config = convertGlobalConfigLocal(config);
+
+//     // send config to all peers
+//     for (int i = 0; i < addresses.size(); i++) {
+//         string peerAddress = addresses[i];
+
+//         cout << "Sending to " << peerAddress << endl;
+//         auto channel = grpc::CreateChannel(peerAddress, grpc::InsecureChannelCredentials());
+//         auto stub = MessageBus::NewStub(channel);
+
+//         // send config
+//         updateConfigResponse response;
+//         ClientContext context;
+
+//         Status status = stub->PeerUpdateConfig(&context, *grpc_config, &response);
+
+//         if (!status.ok()) {
+//             cout << "Error: " << status.error_code() << ": " << status.error_message() << endl;
+//         } else {
+//             cout << "Success" << endl;
+//         }
+//     }
+// }
+
+// int main(int argc, char** argv) {
+//     cout << "Starting messagebus" << endl;
+
+//     char* addr = std::getenv("SERVER_ADDRESS");
+//     string selfAddress;
+
+//     if (addr == nullptr) {
+//         cerr << "SERVER_ADDRESS not set" << endl;
+//         return 1;
+//     } else {
+//         selfAddress = addr;
+//     }
+
+//     char* address_str = std::getenv("PEER_ADDRESSES");
+//     addresses = vector<string>();
+//     if (address_str == NULL) {
+//         cerr << "PEER_ADDRESS not set" << endl;
+//         return 1;
+//     } else {
+//         // parse address (comma separated)
+//         std::istringstream ss(address_str);
+//         std::string token;
+//         while (std::getline(ss, token, ',')) {
+//             addresses.push_back(token);
+//         }
+//     }
+
+//     // send initial config to peers
+//     sendGlobalConfig(currGlobalConfig);
+
+//     return 0;
+// }
 
 // #include "scheduler.hpp"
 

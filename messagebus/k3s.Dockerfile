@@ -17,7 +17,9 @@ RUN apt-get update && \
     pkg-config \
     libtool \
     golang \
-    curl
+    curl \
+    python3 \
+    python3-pip
 
 RUN cd / && git clone -b v1.38.0 https://github.com/grpc/grpc && \
     cd /grpc && \
@@ -48,6 +50,9 @@ RUN chmod +x /workspace/tools/grpc_cpp.sh && \
 
 RUN chmod +x /workspace/tools/build.sh && \
     /workspace/tools/build.sh
+
+# Install Kubernetes Python client
+RUN pip3 install kubernetes
 
 # # Command to run when the container starts
 # # Assuming the compiled binary is named 'main' and located in the build directory
