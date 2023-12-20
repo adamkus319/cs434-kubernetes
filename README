@@ -1,0 +1,73 @@
+MULTI-CLUSTER KUBERNETES
+
+
+Team: Adam Kus and Yukoh Shimizu
+
+
+Description:
+This project extends traditional Kubernetes to a multi-cluster environment, providing 
+an interface for several different clusters to communicate with and update each other. 
+Clusters are separated into regional groups that represent a geographic locality (ex: 
+the US region, or the Europe region). Once the multi-cluster extension is running on 
+each cluster, a user can input the number of service replicas desired in a region. Any 
+cluster can accept an update from a user, making the system very decentralized and easy 
+to access. This change is then scheduled to specific clusters in the region, and the 
+new global state is propagated throughout the global multi-cluster system. When the 
+relevant clusters receive the updated global configuration, they update their deployments 
+to reflect the rule input by the user.
+
+
+Source Code:
+The code can be found at https://github.com/adamkus319/cs434-kubernetes 
+
+The code was also integrated into a fork of Kubernetes, which can be found at
+https://github.com/adamkus319/kubernetes-multicluster. The messagebus code was added 
+to the /cmd/multi-cluster folder.
+
+
+Production Efforts:
+Documentation, setup steps, and a demo video can be found at: 
+https://drive.google.com/drive/folders/1dVuCRn0BVAHaYDLTRshJ1kImBhTadHPG?usp=sharing
+
+Additionally, documentation was also integrated into the Kubernetes documentation website. 
+The forked repository can be found at: https://github.com/adamkus319/website
+The multi-cluster information was added into /content/en/docs/mc_docs. Pictures from the
+locally-hosted website can be found in the Google drive link with the other documentation.
+
+The primary way we evaluated our code was thoroughly testing each individual piece before
+fitting them togehter to ensure correct behavior. This made assembling the components much
+easier, since it allowed us to better isolate whether bugs were coming from the component or
+the component's interaction with other software. Additionally, we reviewed sections of each 
+other's code when checking for bugs or better implementation methods, which helped lead to
+faster solutions.
+
+We also strove to evaluate ourselves in this project by adhering to common SWE principles, such
+as keeping it simple. For example, we chose gRPC because even though it took a little longer 
+to learn, it provided us simple message and parsing capabilities that would have easily been 
+more bloated/complex had we implemented them ourselves. This goes hand-in-hand with extensibility
+(something we also kept in mind), which is greatly improved by using tools like gRPC instead of 
+providing a custom format that would have to be altered in the future (especially if the code is
+being worked on by several people, where a common gRPC interface is easier to understand). 
+
+
+Analysis + Future Work:
+Given more time, there are several things that could be added to the codebase to improve 
+functionality and robustness. For example, the scheduling algorithm is simple and will 
+load more services to the first clusters within the region’s cluster vector; there is no 
+proper load balancing as services are added/removed. Also, there are no options to configure 
+the deployment of a new service upon its creation, which would involve a more complex data 
+structure to describe the global configuration of the system. Other edge cases (such as 
+what if the Docker container for a deployment has a name different from <deployment>:latest?)
+are also not covered, as the goal was to get the basic system up and running for 
+demonstration. Furthermore, the project should have been programmed in Go instead of C++. 
+Programming in Go would have better integrated the additions to the standard Kubernetes 
+environment and would have removed the use of Python scripts for accessing the Kubernetes API.
+
+Further work is also needed to implement request forwarding among clusters within a region. 
+Upon receiving a request for a service it is not currently running, a cluster should be able 
+to forward that request to another cluster in the region that is running that service, acting 
+as a proxy. Additionally, the API only currently supports scheduling a number of replicas of
+a given service in a given region. A more complex API grammar could be developed for global
+configuration updates (for example, having the ability to exclude clusters in a region, or to
+specify a specific cluster in a region).
+
