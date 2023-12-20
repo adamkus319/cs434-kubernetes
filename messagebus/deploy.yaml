@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messagebus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: messagebus
+  template:
+    metadata:
+      labels:
+        app: messagebus
+    spec:
+      containers:
+      - name: messagebus
+        image: docker.io/library/messagebus:v1
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: my-app-config2
